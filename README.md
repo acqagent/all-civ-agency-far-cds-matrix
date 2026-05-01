@@ -27,7 +27,7 @@ The Federal Acquisition Regulation is undergoing a top-to-bottom rewrite — the
 | Title | As published in the FAR |
 | Type | `Provision` or `Clause` (yellow fill = provision, blue fill = clause) |
 | RFO Status | `Retained` / `Removed by RFO` / `Added by RFO` (red fill = removed, green fill = added) |
-| Pre-RFO Effective Date | Date as published in FAR Part 52 |
+| Effective Date (52.103) | Clause's effective date as published in FAR Part 52. Per FAR 52.103(a), `(DEVIATION)` is appended when the agency has issued a class deviation that covers this clause's parent Part. |
 | Prescription FAR Ref | The FAR section that prescribes the clause's use (e.g., `3.202`) |
 | `<Agency>` Deviation Date | The agency's class-deviation date for the parent FAR Part |
 | Disposition | `Updated` if the agency has issued a class deviation for that Part |

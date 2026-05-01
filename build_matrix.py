@@ -156,7 +156,7 @@ def write_agency_sheet(wb, agency: str, master: list[dict], part_dates: dict[int
         "Title",
         "Type",
         "RFO Status",
-        "Pre-RFO Effective Date",
+        "Effective Date (52.103)",
         "Prescription FAR Ref",
         f"{agency} Deviation Date",
         "Disposition",
@@ -174,13 +174,17 @@ def write_agency_sheet(wb, agency: str, master: list[dict], part_dates: dict[int
     for entry in master:
         part = entry["part"]
         dev = part_dates.get(part) if part is not None else None
+        # FAR 52.103(a): when a provision/clause is used with an authorized
+        # deviation, the CO inserts "(DEVIATION)" after the date in the citation.
+        eff = entry["effective"]
+        eff_display = f"{eff} (DEVIATION)" if dev and eff else eff
         row = [
             part if part is not None else "",
             entry["number"],
             entry["title"],
             entry["type"],
             entry["rfo_status"],
-            entry["effective"],
+            eff_display,
             entry["prescription_ref"],
             dev["date"] if dev else "",
             dev["disposition"] if dev else "",
@@ -237,7 +241,9 @@ def write_readme(wb, master_count: int, agencies: list[str], status_counts: dict
         "  - Title: as published; Alternate variants carry the alternate label",
         "  - Type: Provision or Clause (yellow = provision, blue = clause)",
         "  - RFO Status: Retained / Removed by RFO / Added by RFO (red = removed, green = added)",
-        "  - Pre-RFO Effective Date: as published in FAR Part 52",
+        "  - Effective Date (52.103): clause's effective date as published in FAR Part 52.",
+        "      Per FAR 52.103(a), '(DEVIATION)' is appended when the agency has issued a",
+        "      class deviation that covers this clause's parent Part.",
         "  - Prescription FAR Ref: prescribing FAR section (e.g., 3.202)",
         "  - <Agency> Deviation Date: agency's deviation date for the parent FAR Part",
         "  - Disposition: 'Updated' if the agency has issued a class deviation for that Part",
