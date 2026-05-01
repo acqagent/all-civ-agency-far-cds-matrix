@@ -30,6 +30,7 @@ The Federal Acquisition Regulation is undergoing a top-to-bottom rewrite — the
 | Effective Date (52.103) | Clause's effective date as published in FAR Part 52. Per FAR 52.103(a), `(DEVIATION)` is appended when the agency has issued a class deviation that covers this clause's parent Part. |
 | Prescription FAR Ref | The FAR section that prescribes the clause's use (e.g., `3.202`) |
 | `<Agency>` Deviation Date | The agency's class-deviation date for the parent FAR Part |
+| Deviation Effective | `Immediate` if the memo is effective immediately on issuance; blank otherwise |
 | Disposition | `Updated` if the agency has issued a class deviation for that Part |
 | Source / Notes | Source PDF and scope language from the agency's deviation memo |
 | Prescription Text | Full long-form prescription guidance |

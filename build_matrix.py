@@ -130,8 +130,12 @@ def load_agency_part_dates() -> dict[str, dict[int, dict]]:
                 part = int(str(row[idx["Part"]]).strip())
             except (TypeError, ValueError):
                 continue
+            raw_date = str(row[idx[date_col]] or "")
+            is_immediate = bool(re.search(r"\(?[Ii]mmediate\)?", raw_date))
+            clean_date = re.sub(r"\s*\(?[Ii]mmediate\)?\s*", "", raw_date).strip()
             per_part[part] = {
-                "date": row[idx[date_col]] or "",
+                "date": clean_date,
+                "effective": "Immediate" if is_immediate else "",
                 "disposition": row[idx["Disposition"]] or "",
                 "notes": row[idx["Notes"]] or "",
             }
@@ -159,6 +163,7 @@ def write_agency_sheet(wb, agency: str, master: list[dict], part_dates: dict[int
         "Effective Date (52.103)",
         "Prescription FAR Ref",
         f"{agency} Deviation Date",
+        "Deviation Effective",
         "Disposition",
         "Source / Notes",
         "Prescription Text",
@@ -187,6 +192,7 @@ def write_agency_sheet(wb, agency: str, master: list[dict], part_dates: dict[int
             eff_display,
             entry["prescription_ref"],
             dev["date"] if dev else "",
+            dev["effective"] if dev else "",
             dev["disposition"] if dev else "",
             dev["notes"] if dev else "",
             entry["prescription_text"],
@@ -215,10 +221,10 @@ def write_agency_sheet(wb, agency: str, master: list[dict], part_dates: dict[int
                 if not cell.fill.fgColor or cell.fill.fgColor.rgb in (None, "00000000"):
                     cell.fill = NO_DEV_FILL
 
-    widths = [8, 16, 50, 11, 16, 14, 22, 22, 14, 70, 70]
+    widths = [8, 16, 50, 11, 16, 14, 22, 22, 12, 14, 70, 70]
     for i, w in enumerate(widths, start=1):
         ws.column_dimensions[get_column_letter(i)].width = w
-    for col in (3, 10, 11):
+    for col in (3, 11, 12):
         for row_cells in ws.iter_rows(min_row=2, min_col=col, max_col=col):
             for cell in row_cells:
                 cell.alignment = Alignment(wrap_text=True, vertical="top")
@@ -246,6 +252,7 @@ def write_readme(wb, master_count: int, agencies: list[str], status_counts: dict
         "      class deviation that covers this clause's parent Part.",
         "  - Prescription FAR Ref: prescribing FAR section (e.g., 3.202)",
         "  - <Agency> Deviation Date: agency's deviation date for the parent FAR Part",
+        "  - Deviation Effective: 'Immediate' if the memo is effective immediately on issuance; blank otherwise",
         "  - Disposition: 'Updated' if the agency has issued a class deviation for that Part",
         "  - Source / Notes: source PDF and scope, from the agency's deviation memo",
         "  - Prescription Text: full prescription guidance from FAR (long-form)",
