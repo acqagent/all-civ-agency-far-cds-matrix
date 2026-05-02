@@ -29,9 +29,27 @@ DESKTOP = Path(r"C:\Users\tijki\Desktop")
 
 WARU_XLSX = DESKTOP / "WarU Provision & Clause Matrix (042922026).xlsx"
 HHS_FORMAT_XLSX = DOWNLOADS / "far_class_deviations_hhs_format.xlsx"
+CORPUS_PROVISIONS_XLSX = REPO / "far_provisions_clauses-2026-04-27.xlsx"
 OUTPUT_XLSX = DOWNLOADS / "far_provisions_clauses_matrix.xlsx"
 
 CLAUSE_NUM_RE = re.compile(r"^52\.(\d{3})-(\d+[A-Za-z]?)$")
+
+# Title corrections that survive Unicode normalization.
+# Sourced from acquisition.gov post-RFO Part 52 (corpus baseline).
+TITLE_OVERRIDES: dict[str, str] = {
+    "52.209-14": "Reserve Officer Training Corps and Military Recruiting on Campus",
+    "52.204-7": "System for Award Management—Registration",
+    "52.212-4": "Terms and Conditions—Commercial Products and Commercial Services",
+    "52.213-4": "Terms and Conditions—Simplified Acquisitions (Noncommercial)",
+    "52.219-18": "Notification of Competition Limited to Eligible 8(a) Participants",
+    "52.223-2": "Reporting of Biobased Products Under Service and Construction Contracts",
+    "52.223-11": "Ozone-Depleting Substances",
+}
+
+# Type corrections (Provision <-> Clause) where WarU master is wrong.
+TYPE_OVERRIDES: dict[str, str] = {
+    "52.241-1": "Clause",
+}
 
 
 def part_from_number(number: str) -> int | None:
@@ -76,8 +94,33 @@ def normalize_date(value) -> str:
     return str(value).strip()
 
 
+def load_corpus_overrides() -> dict[str, dict]:
+    """Load post-RFO authoritative effective dates and titles from the corpus.
+
+    For Retained clauses, the corpus reflects what acquisition.gov currently shows
+    in post-RFO Part 52 — newer than the WarU master in many cases (e.g. 52.227-1
+    was revised Jun 2020 but WarU still carries Apr 1984).
+    """
+    if not CORPUS_PROVISIONS_XLSX.exists():
+        return {}
+    wb = openpyxl.load_workbook(CORPUS_PROVISIONS_XLSX, data_only=True, read_only=True)
+    ws = wb["Provisions & Clauses"]
+    out: dict[str, dict] = {}
+    for row in ws.iter_rows(min_row=2, values_only=True):
+        num, title, typ, eff = row[0], row[1], row[2], row[3]
+        if not num:
+            continue
+        out[str(num).strip()] = {
+            "title": (title or "").strip(),
+            "type": typ,
+            "effective": (eff or "").strip() if isinstance(eff, str) else eff,
+        }
+    return out
+
+
 def load_master() -> list[dict]:
-    """Load 52.* rows from the WarU matrix."""
+    """Load 52.* rows from the WarU matrix, overriding stale dates/titles from corpus."""
+    corpus = load_corpus_overrides()
     wb = openpyxl.load_workbook(WARU_XLSX, data_only=True)
     ws = wb["Matrix"]
     # Header row is 6; data starts at row 7.
@@ -97,10 +140,32 @@ def load_master() -> list[dict]:
         prescription_text = ws.cell(row=r, column=6).value or ""
         pc = clean_pc(ws.cell(row=r, column=7).value)
         status = rfo_status(ws.cell(row=r, column=8).value)
+
+        title_s = str(title).strip()
+        # Corpus is authoritative for retained clause base data.
+        # Don't override "Removed by RFO" rows — corpus only carries retained clauses.
+        if status != "Removed by RFO" and num_s in corpus:
+            c = corpus[num_s]
+            if c["effective"]:
+                date = normalize_date(c["effective"])
+            # Only swap title if corpus title is non-empty and not a corpus-side
+            # parsing truncation (clipped at first period).
+            ct = c["title"]
+            if ct and len(ct) > 3 and not ct.endswith((" U", " F")):
+                title_s = ct
+            if c["type"] in ("Provision", "Clause"):
+                pc = c["type"]
+
+        # Hand-curated overrides win over both corpus and WarU.
+        if num_s in TITLE_OVERRIDES:
+            title_s = TITLE_OVERRIDES[num_s]
+        if num_s in TYPE_OVERRIDES:
+            pc = TYPE_OVERRIDES[num_s]
+
         rows.append(
             {
                 "number": num_s,
-                "title": str(title).strip(),
+                "title": title_s,
                 "type": pc,
                 "rfo_status": status,
                 "effective": date,

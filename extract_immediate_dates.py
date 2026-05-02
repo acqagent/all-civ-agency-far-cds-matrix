@@ -30,6 +30,9 @@ import openpyxl
 
 PDF_DIR = Path(r"C:\Users\tijki\Downloads\_rfo_pdfs")
 HHS_FORMAT = Path(r"C:\Users\tijki\Downloads\far_class_deviations_hhs_format.xlsx")
+CORPUS_DEVIATIONS = Path(
+    r"C:\Users\tijki\rfo-deviations-repo\far_class_deviations-2026-04-27.xlsx"
+)
 
 MONTHS = {m: i+1 for i, m in enumerate(
     ["jan","feb","mar","apr","may","jun","jul","aug","sep","oct","nov","dec"])}
@@ -81,11 +84,32 @@ def _ok(d: date | None) -> bool:
 
 
 def find_date(text: str) -> date | None:
-    """Return the best-guess issuance date for the deviation memo.
+    """Return the best-guess effective date for the deviation memo.
 
-    Layered preference: digital signature > Adobe Sign block > memo-header
+    Layered preference: explicit "Effective immediately as of …" / "effective
+    [date]" body phrase > digital signature > Adobe Sign block > memo-header
     date > anywhere in body (excluding EO 14275 signing date).
+
+    The "Effective immediately as of …" pattern wins because that is what the
+    matrix actually wants: the date a deviation took effect, not the date it
+    was signed (e.g. CPSC memos signed in Nov for deviations effective Sep 30).
     """
+    # 0. Explicit effective-date phrasing in body.
+    eff_dates: list[date] = []
+    eff_patterns = [
+        r"[Ee]ffective\s+immediately\s+as\s+of\s+([A-Z][a-z]{2,8})\s+(\d{1,2}),?\s+(\d{4})",
+        r"[Ee]ffective\s+(?:date|as\s+of)\s*[:\s]*([A-Z][a-z]{2,8})\s+(\d{1,2}),?\s+(\d{4})",
+        r"is\s+effective\s+([A-Z][a-z]{2,8})\s+(\d{1,2}),?\s+(\d{4})",
+        r"shall\s+be\s+effective\s+([A-Z][a-z]{2,8})\s+(\d{1,2}),?\s+(\d{4})",
+    ]
+    for pat in eff_patterns:
+        for m in re.finditer(pat, text):
+            d = _parse_word_date(m[1], m[2], m[3])
+            if _ok(d):
+                eff_dates.append(d)
+    if eff_dates:
+        return min(eff_dates)
+
     # 1. Adobe digital signature: "Date: 2025.06.11"
     sig_dates: list[date] = []
     for m in re.finditer(r"Date:\s*(\d{4})[.\-/](\d{1,2})[.\-/](\d{1,2})", text):
@@ -173,6 +197,29 @@ def fmt(d: date) -> str:
     return f"{d.strftime('%b %Y')} (Immediate)"
 
 
+def load_corpus_iso_dates() -> dict[str, date]:
+    """Return {source_url: effective_date} from the corpus class-deviations sheet.
+
+    The corpus runs an LLM-based extractor that already resolves "Effective
+    immediately as of …" — using its output avoids re-parsing CPSC-style memos
+    where the signature block date differs from the effective date.
+    """
+    if not CORPUS_DEVIATIONS.exists():
+        return {}
+    wb = openpyxl.load_workbook(CORPUS_DEVIATIONS, data_only=True, read_only=True)
+    ws = wb["Class Deviations"]
+    out: dict[str, date] = {}
+    for row in ws.iter_rows(min_row=2, values_only=True):
+        link, iso = row[7], row[4]
+        if not link or iso is None:
+            continue
+        if hasattr(iso, "date"):
+            out[link] = iso.date()
+        elif isinstance(iso, date):
+            out[link] = iso
+    return out
+
+
 def main() -> None:
     PDF_DIR.mkdir(parents=True, exist_ok=True)
 
@@ -209,18 +256,30 @@ def main() -> None:
 
     # Dedupe URLs for download.
     urls = sorted({t[2] for t in targets})
-    print(f"Downloading {len(urls)} unique PDFs ({len(targets)} target rows)...")
+
+    # Prefer the corpus's already-extracted effective dates where available.
+    corpus_iso = load_corpus_iso_dates()
+    print(f"Loaded {len(corpus_iso)} effective dates from corpus.")
+
+    needs_pdf = [u for u in urls if u not in corpus_iso]
+    print(
+        f"Downloading {len(needs_pdf)} PDFs not covered by corpus "
+        f"({len(targets)} target rows total)..."
+    )
 
     def fname(u: str) -> Path:
         return PDF_DIR / u.rsplit("/", 1)[-1]
 
     with ThreadPoolExecutor(max_workers=12) as ex:
-        list(as_completed([ex.submit(fetch, u, fname(u)) for u in urls]))
+        list(as_completed([ex.submit(fetch, u, fname(u)) for u in needs_pdf]))
 
-    # Extract one date per URL.
+    # Extract one date per URL — corpus first, then PDF fallback.
     print("Extracting dates...")
     url_date: dict[str, date | None] = {}
     for u in urls:
+        if u in corpus_iso:
+            url_date[u] = corpus_iso[u]
+            continue
         p = fname(u)
         if not p.exists() or p.stat().st_size < 1000:
             url_date[u] = None
