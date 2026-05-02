@@ -51,6 +51,33 @@ TYPE_OVERRIDES: dict[str, str] = {
     "52.241-1": "Clause",
 }
 
+# Per-(agency, FAR Part) effective-date overrides for memos that bundle many
+# Parts under one PDF but specify a different effective date per Part. The
+# corpus only carries one date per memo, so it can't represent this on its own.
+#
+# DOC PM 2026-06 REVISED (signed 2026-04-22) consolidates 14 prior PMs and sets
+# per-Part effective dates explicitly in the body. Most Parts now share the
+# universal "January 15, 2026" post-RFO transition date; the early-adoption
+# Parts retain their original 2025 effective dates.
+AGENCY_PART_DATE_OVERRIDES: dict[tuple[str, int], str] = {
+    ("DOC", 1):  "May 2025",
+    ("DOC", 6):  "Jul 2025",
+    ("DOC", 10): "May 2025",
+    ("DOC", 11): "Jul 2025",
+    ("DOC", 18): "Jun 2025",
+    ("DOC", 29): "Aug 2025",
+    ("DOC", 31): "Aug 2025",
+    ("DOC", 34): "May 2025",
+    ("DOC", 39): "Jun 2025",
+    ("DOC", 43): "Jun 2025",
+    # All other DOC Parts: "Jan 2026" (universal post-RFO transition).
+    **{("DOC", p): "Jan 2026" for p in (
+        2, 3, 4, 5, 7, 8, 9, 12, 13, 14, 15, 16, 17, 19, 22, 23, 24, 25, 26,
+        27, 28, 30, 32, 33, 35, 36, 37, 38, 40, 41, 42, 44, 45, 46, 47, 48,
+        49, 50, 51, 52, 53,
+    )},
+}
+
 
 def part_from_number(number: str) -> int | None:
     """52.203-3 -> Part 3.  52.252-1 -> Part 52."""
@@ -309,10 +336,14 @@ def write_agency_sheet(wb, agency: str, master: list[dict], part_dates: dict[int
     for entry in master:
         part = entry["part"]
         dev = part_dates.get(part) if part is not None else None
+        # Per-(agency, Part) override wins over the memo-level date.
+        # Used for memos that bundle many Parts with different effective dates.
+        override = AGENCY_PART_DATE_OVERRIDES.get((agency, part)) if part is not None else None
         # FAR 52.103(a): when a provision/clause is used with an authorized
         # deviation, the CO inserts "(DEVIATION)" after the date in the citation.
         eff = entry["effective"]
         eff_display = f"{eff} (DEVIATION)" if dev and eff else eff
+        dev_date = override or (dev["date"] if dev else "")
         row = [
             part if part is not None else "",
             entry["number"],
@@ -321,7 +352,7 @@ def write_agency_sheet(wb, agency: str, master: list[dict], part_dates: dict[int
             entry["rfo_status"],
             eff_display,
             entry["prescription_ref"],
-            dev["date"] if dev else "",
+            dev_date,
             dev["effective"] if dev else "",
             dev["disposition"] if dev else "",
             dev["notes"] if dev else "",
