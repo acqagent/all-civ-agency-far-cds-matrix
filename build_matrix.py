@@ -198,14 +198,79 @@ def load_agency_part_dates() -> dict[str, dict[int, dict]]:
             raw_date = str(row[idx[date_col]] or "")
             is_immediate = bool(re.search(r"\(?[Ii]mmediate\)?", raw_date))
             clean_date = re.sub(r"\s*\(?[Ii]mmediate\)?\s*", "", raw_date).strip()
-            per_part[part] = {
+            notes = row[idx["Notes"]] or ""
+            entry = {
                 "date": clean_date,
                 "effective": "Immediate" if is_immediate else "",
                 "disposition": row[idx["Disposition"]] or "",
-                "notes": row[idx["Notes"]] or "",
+                "notes": notes,
             }
+            # Expand multi-Part deviation memos. The HHS-format file stores one
+            # row per "primary" Part, but a single PDF often covers many Parts
+            # (e.g. DOC's "FAR Parts 1 through 53" or USAID's explicit list).
+            for p in expand_parts(part, notes):
+                per_part[p] = entry
         out[sname] = per_part
     return out
+
+
+def expand_parts(primary: int, notes: str) -> list[int]:
+    """Return every FAR Part this deviation row applies to.
+
+    Reads multi-Part hints from the Notes/Source text. Recognized forms:
+      - Filename list: "Parts-3-17-27-45and52" -> [3,17,27,45,52]
+      - Filename two-Part: "Parts-1and34" -> [1,34]
+      - Filename range: "Parts-1-53" (only when exactly two numbers) -> 1..53
+      - Prose range: "FAR Parts 1 through 53" / "Parts 1 to 53" -> 1..53
+      - Prose list: "parts 1, 6, 10 ... and 43" -> [1,6,10,...,43]
+    Always includes the primary Part. De-duped, sorted.
+    """
+    parts = {primary}
+    text = str(notes or "")
+
+    # Filename two-Part with "and": "Parts-1and34.pdf" -> [1, 34]
+    for m in re.finditer(r"[Pp]arts?-(\d{1,2})and(\d{1,2})\.pdf", text):
+        for v in (int(m[1]), int(m[2])):
+            if 1 <= v <= 53:
+                parts.add(v)
+
+    # Filename list-or-range: "Parts-N-N-...-N(andN)?.pdf"
+    for m in re.finditer(r"[Pp]arts?-(\d{1,2}(?:-\d{1,2})+(?:and\d{1,2})?)\.pdf", text):
+        nums = [int(n) for n in re.findall(r"\d{1,2}", m.group(1))]
+        if len(nums) >= 3 or "and" in m.group(1):
+            # 3+ hyphen-separated numbers, or any "andN" suffix -> explicit list
+            for v in nums:
+                if 1 <= v <= 53:
+                    parts.add(v)
+        elif len(nums) == 2:
+            lo, hi = sorted(nums)
+            # Two-number filename: only treat as a range when the gap is wide
+            # enough that an explicit list would be implausible (>= 5).
+            if hi - lo >= 5 and 1 <= lo <= 53 and 1 <= hi <= 53:
+                parts.update(range(lo, hi + 1))
+            else:
+                parts.update(nums)
+
+    # Prose range: "Parts X through Y" or "Parts X to Y"
+    for m in re.finditer(r"[Pp]arts?\s+(\d{1,2})\s+(?:through|to)\s+(\d{1,2})\b", text):
+        try:
+            lo, hi = int(m[1]), int(m[2])
+        except ValueError:
+            continue
+        if hi > lo and 1 <= lo <= 53 and 1 <= hi <= 53:
+            parts.update(range(lo, hi + 1))
+
+    # Prose list: "parts 1, 6, 10, 11, 18, 29, 31, 34, 39, 43, and corresponding ..."
+    prose = re.search(
+        r"[Pp]arts?\s+((?:\d{1,2}(?:\s*,\s*|\s+and\s+)){2,}\d{1,2})\b", text
+    )
+    if prose:
+        for n in re.findall(r"\d{1,2}", prose.group(1)):
+            v = int(n)
+            if 1 <= v <= 53:
+                parts.add(v)
+
+    return sorted(parts)
 
 
 HEADER_FILL = PatternFill("solid", fgColor="1F2937")
