@@ -1,66 +1,71 @@
 # All Civilian Agency FAR Class Deviations Matrix
 
-A per-agency, per-clause matrix of every FAR Part 52 provision and clause cross-referenced against the **civilian agency class deviations** issued under the Revolutionary FAR Overhaul (RFO).
+A per-agency tracker of every FAR Part 52 provision and clause, stamped with each civilian agency's class-deviation effective date issued under the Revolutionary FAR Overhaul (RFO).
 
-The Federal Acquisition Regulation is undergoing a top-to-bottom rewrite — the *Revolutionary FAR Overhaul* — driven by Executive Order 14275 (April 2025) and OMB memo M-25-26. Each civilian executive agency has issued (and continues to issue) class deviations from the existing FAR while the rewrite is staged in. This matrix lets you see, at a glance, which agency has deviated from which FAR Part, and what status each individual provision/clause has under the RFO.
+The Federal Acquisition Regulation is undergoing a top-to-bottom rewrite — the *Revolutionary FAR Overhaul* — driven by Executive Order 14275 (April 2025) and OMB memo M-25-26. Each civilian executive agency has issued (and continues to issue) class deviations from the existing FAR while the rewrite is staged in. This matrix lets you look up, agency by agency, which 52.* clauses an agency has deviated from and on what date.
 
 > DoD class deviations follow a different cadence under DFARS and are intentionally out of scope.
 
-## What's in the workbook
+## What's in the repo
 
-`far_provisions_clauses_matrix.xlsx` — one tab per civilian agency (34 tabs) plus a README tab.
+- `far_provisions_clauses_matrix.xlsx` — the master workbook. **34 tabs**: a README tab plus one tab per civilian agency (33 agencies).
+- `RFO_Part52_All_Agencies.zip` — the master workbook plus the 33 individual per-agency workbooks (one xlsx each), zipped together for offline browsing.
 
-**Master row count: 867** — every `52.*` provision and clause from the pre-RFO FAR Part 52 plus the RFO additions, including Alternates.
-
-| Status | Count | Meaning |
-|---|---:|---|
-| Retained | 684 | Still in post-RFO FAR Part 52 |
-| Removed by RFO | 173 | Pre-RFO entry retired by the RFO |
-| Added by RFO | 10 | New entries introduced by the RFO (90-series + new Alternates) |
+**Master row count: 702** — every `52.*` provision and clause from the pre-RFO FAR Part 52, mapped against each agency's deviation memos.
 
 ## Per-agency tab schema
 
 | Column | Description |
 |---|---|
-| FAR Part | Derived from the clause number (e.g., 52.203-3 → Part 3, 52.252-1 → Part 52) |
-| Number | Clause/provision number, including Alternate variants |
-| Title | As published in the FAR |
-| Type | `Provision` or `Clause` (yellow fill = provision, blue fill = clause) |
-| RFO Status | `Retained` / `Removed by RFO` / `Added by RFO` (red fill = removed, green fill = added) |
-| Effective Date (52.103) | Clause's effective date as published in FAR Part 52. Per FAR 52.103(a), `(DEVIATION)` is appended when the agency has issued a class deviation that covers this clause's parent Part. |
-| Prescription FAR Ref | The FAR section that prescribes the clause's use (e.g., `3.202`) |
-| `<Agency>` Deviation Date | The agency's class-deviation date for the parent FAR Part |
-| Deviation Effective | `Immediate` if the memo is effective immediately on issuance; blank otherwise |
-| Disposition | `Updated` if the agency has issued a class deviation for that Part |
-| Source / Notes | Source PDF and scope language from the agency's deviation memo |
-| Prescription Text | Full long-form prescription guidance |
+| Type | `Provision` or `Clause` |
+| Number | FAR 52.x clause/provision identifier |
+| Part | FAR Part the clause belongs to |
+| Pre-RFO Title | Original FAR title |
+| Pre-RFO Date | Original effective date |
+| RFO Title | Title under the RFO; `[Reserved]` indicates the FAR Council removed the clause |
+| `<Agency>` Deviation Effective Date | The agency's class-deviation effective date for this clause's parent Part. `--` (or empty) when no agency-specific deviation was found. `Reserved` rows from the blank template are left untouched. |
+| Disposition | FAR Council baseline action: `No Change`, `Removed`, `Updated`, `Reserved`, etc. |
+| Notes | Agency-specific commentary when the deviation memo flags something non-standard for the parent Part. `--` otherwise. |
 
-Rows are gray-shaded when the agency has **not** issued a class deviation for that FAR Part.
+## Filling logic (Effective Date column G)
 
-## Agencies covered (34)
+- For each FAR Part addressed by an agency memo, the **earliest** memo's effective date is stamped on every clause in that part — but only on rows whose Disposition is something other than `No Change`.
+- **Per-clause overrides:** if a memo explicitly names a 52.x clause and assigns it `Removed`, `Updated`, `Reserved`, or `Added`, that memo's date wins for that single clause.
+- On `No Change` rows, only an explicit `Removed` override can stamp a date — `Reserved` / `Updated` / `Added` on a No-Change row is treated as low-confidence and skipped (open-model false-positive guard).
+- Rows where the blank template's effective-date already says `Reserved` are left untouched: those are FAR Council removals the agency adopted as-is.
 
-CFTC · CPSC · DHS · DOC · DOE · DOI · DOJ · DOL · DOS · DOT · ED · EPA · FEC · FMC · GSA · HHS · HUD · MCC · MSPB · NARA · NASA · NLRB · NRC · OPM · OSHRC · PBGC · Peace Corps · SEC · SSA · Treasury · Udall Foundation · USAID · USDA · VA
+## Notes column
+
+- One note per agency memo that has agency-specific commentary worth flagging (the LLM extractor's `general_notes` field).
+- Placed on the first stamped row whose Part is in scope of that memo.
+- Vanilla "agency adopts FAR Council model verbatim" memos produce no note.
+
+## Agencies covered (33)
+
+CFTC · CPSC · DHS · DOC · DOE · DOI · DOJ · DOL · DOS · DOT · ED · EPA · FEC · FMC · GSA · HHS · HUD · MCC · MSPB · NARA · NASA · NLRB · NRC · OPM · OSHRC · PBGC · SEC · SSA · Treasury · Udall Foundation · USAID · USDA · VA
+
+> The **GSA** tab is the reference (ground-truth) filled template that ships with the blank template; it was **not** produced by this pipeline.
 
 ## Methodology and caveats
 
-- **Master list source:** the WarU Provision & Clause Matrix, version 2026-04-29.
-- **Agency deviation dates source:** [acqagent/rfo-deviations](https://github.com/acqagent/rfo-deviations) — extracted from the deviation PDFs linked from the [acquisition.gov FAR Overhaul deviation guide](https://www.acquisition.gov/far-overhaul/far-part-deviation-guide).
-- **Rollup granularity.** Agency deviation dates are rolled up at the FAR Part level. A removed clause inside a deviated Part inherits the Part's deviation date because adopting the RFO Part deviation effectively retires the removed clause. Per-clause deviation dates would require parsing individual agency PDFs and are not yet captured here.
-- **Source links can rot.** Some agency deviation PDFs are removed or replaced over time. Cross-reference with the upstream guide if precision matters.
+- **Master clause list source:** the WarU Provision & Clause Matrix blank template (May 2026 cut).
+- **Agency deviation memos source:** [acqagent/rfo-deviations](https://github.com/acqagent/rfo-deviations) — 1,192 PDFs scraped from acquisition.gov.
+- **Extraction model:** Claude Opus 4.7 (max effort) with a structured JSON schema, one bundled prompt per agency. Each agency's memos are fed to the model together so it can reconcile parts addressed, effective dates, and per-clause overrides across all of that agency's PDFs in a single pass.
+- **Rollup granularity.** Effective dates roll up at the FAR Part level by default. Per-clause overrides only fire when a memo explicitly names the 52.x clause by number.
+- **Small-corpus agencies.** OSHRC, NLRB, FEC, USAID, FMC have very small corpora (1–2 PDFs); their tabs may have few or no filled dates.
+- **Source links can rot.** Some agency deviation PDFs are removed or replaced over time. Cross-reference with the upstream acquisition.gov guide if precision matters.
+- **Verify before relying.** Effective dates are extracted by an LLM from PDF text. Spot-check edge cases against the source memos before relying on them in compliance decisions.
 
 ## Building / regenerating
 
-`build_matrix.py` is the generator. It expects three local inputs:
+The pipeline lives outside this repo at `far-deviations/scripts/process_agency.py`. It reads the corpus from [acqagent/rfo-deviations](https://github.com/acqagent/rfo-deviations) and a blank P&C template, then:
 
-1. `WarU Provision & Clause Matrix (042922026).xlsx` (master 52.* list)
-2. `far_class_deviations-2026-04-27.xlsx` (raw scrape, from [acqagent/rfo-deviations](https://github.com/acqagent/rfo-deviations))
-3. `far_class_deviations_hhs_format.xlsx` (per-agency Part-level rollup)
+1. Pulls every PDF assigned to the requested agency from the manifest.
+2. Extracts text via `pdfplumber` (cached per-agency).
+3. Bundles all of that agency's PDF text into one Claude Opus 4.7 max-effort call with a JSON schema that captures effective dates, parts addressed, and per-clause overrides.
+4. Stamps the extracted dates and notes into a copy of the blank template.
 
-Edit the path constants at the top of `build_matrix.py` to point at where you keep those files locally, then run:
-
-```
-python build_matrix.py
-```
+The 33 agency workbooks are then merged into `far_provisions_clauses_matrix.xlsx` by `build_master.py` (one tab per agency plus a README tab).
 
 ## License
 
@@ -70,4 +75,4 @@ The underlying provisions, clauses, and agency deviation memoranda are works of 
 
 If you use this matrix in research, please cite as:
 
-> AcqAgent. *All Civilian Agency FAR Class Deviations Matrix*, version 2026-04-30. https://github.com/acqagent/all-civ-agency-far-cds-matrix
+> AcqAgent. *All Civilian Agency FAR Class Deviations Matrix*, version 2026-05-03. https://github.com/acqagent/all-civ-agency-far-cds-matrix
